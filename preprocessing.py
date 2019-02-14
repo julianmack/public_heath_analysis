@@ -1,9 +1,15 @@
 """Class holding all the preprocessing and data manipulation functions"""
 import  pandas as pd
+import numpy as np
 import settings
 import sqlalchemy as sqla
 import time
 import os
+from sklearn.preprocessing import StandardScaler
+from scipy import stats
+
+from indicator_categories import ind_cat as INDICATOR_CATEGORIES
+
 
 PATH = "C:/Users/julia/Documents/coding/codingchallenges/qbiz/Archive/DataHealthProfiles/"
 
@@ -86,13 +92,14 @@ class Preprocess():
                 query += "{}, ".format(col)
             query = query[:-2] #remove ", "
             query += " FROM indicators"
-            results = pd.read_sql(query, con=conn, columns =columns)
-        return results
+            df = pd.read_sql(query, con=conn, columns =columns)
+        df = df.set_index("ONS_CODE_NEW", drop=True)
+        return df
 
     def get_df_from_db_no_view(self):
         """Extracts a df with relevant information from db without using view.
         I used this for speed comparison w. view query.
-        (see data_preprocessing_pipeline.ipynb for results)"""
+        (see preprocessing_and_analysis.ipynb for results)"""
 
         #set up db connection
         engine = sqla.create_engine(settings.DATABASE_URL, client_encoding='utf8')
@@ -108,9 +115,9 @@ class Preprocess():
 
             columns = ["\"AREA_NAME\"", "\"ONS_CODE_NEW\""] + table_names
 
-            results = pd.read_sql(query, con=conn, columns =columns)
-
-        return results
+            df = pd.read_sql(query, con=conn, columns =columns)
+        df = df.set_index("ONS_CODE_NEW", drop=True)
+        return df
 
     def __SQL_select_all_data(self, table_names):
         """Helper function to create SQL query joining all tables on
@@ -145,11 +152,69 @@ class Preprocess():
         return query
 
 
+    def divide_into_ABC_DE(self, df):
+        """"Accepts a df, indexes on ONS_CODE_NEW and splits into
+        two dfs of indicators ABC and DE"""
+        try:
+            df = df.set_index("ONS_CODE_NEW", drop=True)
+        except:
+            pass
+        try:
+            df = df.drop(columns =["AREA_NAME"])
+        except KeyError:
+            pass
 
+        ABC_cols = []
+        DE_cols = []
+        ind_cat = INDICATOR_CATEGORIES #dictionary
+
+        for col in df.columns:
+            if ind_cat[col] in ["A", "B", "C"]:
+                ABC_cols.append(col)
+            elif ind_cat[col] in ["D", "E"]:
+                DE_cols.append(col)
+            else:
+                raise "column {} not in expected indicator categories".format(col)
+        df1 = df[ABC_cols]
+        df2 = df[DE_cols]
+
+        return df1, df2
+
+    def normalize_and_fill_nan(self, df):
+        """Mean centre normalize and fill Nan with mean"""
+        scaler = StandardScaler() #Mean centres and normalizes per feature
+
+        scaler.fit(df)
+        X = scaler.transform(df) #converts into numpy array
+        X_names = dict(zip(range(len(df.columns)), df.columns))
+
+        mean = np.nanmean(X, axis=1).reshape((1, -1))
+
+        #Find indicies that you need to replace
+        inds_X = np.where(np.isnan(X))
+
+        X[inds_X] = np.take(mean, inds_X[0], axis = 1)
+        return X, X_names
+
+    def remove_outliers(self, df):
+        """Removes extreme outliers with z score > 4.
+        This is not valid in general but is O.K. when running linear
+        Regression as outliers will skew the predictions."""
+        try:
+            df = df.drop(columns =["AREA_NAME"])
+        except KeyError:
+            pass
+        z = np.nan_to_num(np.abs(stats.zscore(df)))
+
+        df_new =  df[(z < 4).all(axis=1)]
+        print("{} datapoints reduced to {}".format(df.shape[0], df_new.shape[0]))
+        return df_new
 
 
 
 
 if __name__ == "__main__":
     prep = Preprocess()
-    prep.get_df_from_db_no_view()
+    df = prep.get_df_from_db_w_view()
+    df_ABC, df_DE = prep.divide_into_ABC_DE(df)
+    print(df_ABC.shape, df_DE.shape )

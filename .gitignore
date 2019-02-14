@@ -3,3 +3,5 @@ venv/
 
 Archive/
 .ipynb_checkpoints/
+
+pairplot_ALL.png
