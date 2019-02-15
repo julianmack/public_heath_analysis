@@ -4,4 +4,8 @@ venv/
 Archive/
 .ipynb_checkpoints/
 
-pairplot_ALL.png
+figures/pairplot_ALL.png
+figures/pairplot_final.png
+figures/pairplot_Indep_Dep.png
+figures/pairplot_Indep_Dep2.png
+figures/pairplot_Indep_Dep3.png
