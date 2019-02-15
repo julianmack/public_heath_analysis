@@ -1,6 +1,7 @@
 # coding: utf-8
 """Describes the sqlalchemy classes - generated using sqlacodegen
-More useful for write and update operations"""
+More useful for write and update operations."""
+
 from sqlalchemy import BigInteger, Column, Float, MetaData, Table, Text
 
 metadata = MetaData()
